@@ -1,0 +1,309 @@
+#include "mainwindow.h"
+#include "ui_mainwindow.h"
+#include <QtGui>
+
+MainWindow::MainWindow(QWidget *parent) :
+    QMainWindow(parent),
+    ui(new Ui::MainWindow)
+{
+    ui->setupUi(this);
+    /*QPushButton *btn = new QPushButton(this);
+    QLineEdit *le = new QLineEdit(this);
+
+    //新建格栅布局管理器
+    QGridLayout *layout = new QGridLayout;
+    //添加部件，从第0行0列开始
+    layout->addWidget(btn,0,0,1,1);
+    layout->addWidget(le,0,1,1,2);
+    layout->addWidget(ui->textEdit,1,0,1,3);
+    ui->centralWidget->setLayout(layout);*/
+    isUntitled = true;
+    curFile = tr("未命名.txt");
+    setWindowTitle(curFile);
+
+    //查找窗口
+    findDlg = new QDialog(this);
+    findDlg->setWindowTitle(tr("查找"));
+    findLineEdit = new QLineEdit(findDlg);
+    QPushButton *btn = new QPushButton(tr("查找下一个"),findDlg);
+    QVBoxLayout *layout = new QVBoxLayout(findDlg);
+    layout->addWidget(findLineEdit);
+    layout->addWidget(btn);
+    connect(btn,SIGNAL(clicked()),this,SLOT(showFindText()));
+    ui->statusBar->showMessage(tr("欢迎使用记事本!"));
+
+    /*
+    QFont::MixedCase
+    QFont::AllUppercase
+    QFont::AllLowercase
+    QFont::SmallCaps
+    QFont::Capitalize
+    */
+
+    //调节字体窗口
+    /*
+    fontDlg = new QDialog(this);
+    fontDlg->setWindowTitle(tr("调节字体"));
+    font_Combox = new QFontComboBox(fontDlg);
+    QPushButton *font_btn = new QPushButton(tr("确定"),fontDlg);
+    QVBoxLayout *font_layout = new QVBoxLayout(fontDlg);
+    font_layout->addWidget(font_Combox);
+    font_layout->addWidget(font_btn);
+    connect(font_btn,SIGNAL(clicked()),this,SLOT(changeTextFont()));*/
+    connect(ui->action_font,SIGNAL(triggered()),this,SLOT(changeTextFont()));
+
+    //调节颜色的窗口
+    //colorDlg = new QColorDialog(this);
+    connect(ui->action_color,SIGNAL(triggered()),this,SLOT(changeBackgroundColor()));
+}
+//设置背景颜色
+void MainWindow::changeBackgroundColor()
+{
+    QColor color = QColorDialog::getColor(Qt::red,this);
+    QPalette p = this->palette();
+    p.setColor(QPalette::Window,color);
+    this->setPalette(p);
+}
+
+void MainWindow::changeTextFont()
+{
+    /*
+    font = font_Combox->currentFont();
+    ui->textEdit->setFont(font);
+    fontDlg->close();*/
+    bool ok;
+    font = QFontDialog::getFont(
+                      &ok, QFont("宋体", 10), this);
+    if (ok) {
+          ui->textEdit->setFont(font);
+    } else {
+          ui->textEdit->setFont(QFont());
+    }
+//   QFont::Capitalization
+//   ui->textEdit->setCurrentFont(QFont::Capitalize);
+}
+
+//查看文件是否要被保存
+bool MainWindow::maybeSave()
+{
+    //查看文件是否已经被保存过了
+    if(ui->textEdit->document()->isModified())
+    {
+        //已经被修改
+        QMessageBox box;
+        box.setWindowTitle(tr("警告"));
+        box.setIcon(QMessageBox::Warning);
+        box.setText(curFile+tr(" 尚未保存，是否保存?"));
+        QPushButton *yesBtn = box.addButton(tr("是(&Y)"),QMessageBox::YesRole);
+        box.addButton(tr("否(&Y)"),QMessageBox::NoRole);
+        QPushButton *cancelBut = box.addButton(tr("取消"),QMessageBox::RejectRole);
+        box.exec();
+        if(box.clickedButton() == yesBtn)
+        {
+            return save();
+        }
+        else if(box.clickedButton() == cancelBut)
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+void MainWindow::newFile()
+{
+    if(maybeSave())
+    {
+        isUntitled = true;
+        curFile = tr("未命名.txt");
+        setWindowTitle(curFile);
+        ui->textEdit->clear();
+        ui->textEdit->setVisible(true);
+    }
+}
+
+//如果文件以前没有保存过另存为操作saveAs()
+//保存过的话就直接执行saveFile()
+bool MainWindow::save()
+{
+    if(isUntitled)
+    {
+        return saveAs();
+    }
+    else
+    {
+        return saveFile(curFile);
+    }
+}
+
+
+//这里使用QFileDialog来实现一个另存为对话框,并且获取了文件的路径
+bool MainWindow::saveAs()
+{
+    QString fileName = QFileDialog::getSaveFileName(this,tr("另存为"),curFile);
+    if(fileName.isEmpty())
+    {
+        return false;
+    }
+    return saveFile(fileName);
+}
+
+bool MainWindow::saveFile(const QString &fileName)
+{
+    QFile file(fileName);
+    //将文件使用写入方式打开
+    if(!file.open(QFile::WriteOnly | QFile::Text))
+    {
+        QMessageBox::warning(this,tr("多文档编辑器"),tr("无法写入文件 %1: /n %2").arg(fileName).arg(file.errorString()));
+        return false;
+    }
+
+    QTextStream out(&file);
+    //鼠标指针变成为等待状态
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    out << ui->textEdit->toPlainText();
+    //鼠标指针恢复为原来的状态
+    QApplication::restoreOverrideCursor();
+    isUntitled = false;
+    //获得文件的标准路径
+    curFile = QFileInfo(fileName).canonicalFilePath();
+    QDateTime time = QDateTime::currentDateTime();
+    QString str = time.toString("yyyy-MM-dd hh:mm:ss ddd");
+    ui->statusBar->showMessage(tr("正在保存文件:")+fileName+" "+str,5000);
+    setWindowTitle(curFile);
+    return true;
+}
+
+void MainWindow::on_action_new_triggered()
+{
+    newFile();
+}
+
+void MainWindow::on_action_save_triggered()
+{
+    save();
+}
+
+void MainWindow::on_action_saveas_triggered()
+{
+    saveAs();
+}
+
+bool MainWindow::loadFile(const QString &fileName)
+{
+    QFile file(fileName);
+    if(!file.open(QFile::ReadOnly | QFile::Text))
+    {
+        QMessageBox::warning(this,tr("多文档编辑器"),tr("无法读取文件 %1 :\n %2").arg(fileName).arg(file.errorString()));
+        //只读方式打开文件,出错则提示,并返回false
+        return false;
+    }
+    //新建文本流对象
+    QTextStream in(&file);
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    //读取文件的全部内容并且加载到编辑器中
+    ui->textEdit->setPlainText(in.readAll());
+    QApplication::restoreOverrideCursor();
+
+    //设置当前文件
+    curFile = QFileInfo(fileName).canonicalFilePath();
+    setWindowTitle(curFile);
+    return true;
+
+}
+
+MainWindow::~MainWindow()
+{
+    delete ui;
+}
+
+
+void MainWindow::on_action_open_triggered()
+{
+    if(maybeSave())
+    {
+        QString fileName = QFileDialog::getOpenFileName(this);
+
+        //如果文件名不为空，则加载文件
+        if(!fileName.isEmpty())
+        {
+            loadFile(fileName);
+            ui->textEdit->setVisible(true);
+        }
+    }
+}
+
+//单个文本文件退出时的动作
+void MainWindow::on_action_close_triggered()
+{
+    if(maybeSave())
+    {
+        ui->textEdit->setVisible(false);
+    }
+}
+
+//整个应用程序退出时的动作
+void MainWindow::on_action_exit_triggered()
+{
+    //先执行关闭操作，再退出应用程序
+    //qApp是指向应用程序的全局指针
+    on_action_close_triggered();
+    qApp->quit();
+}
+
+void MainWindow::on_action_undo_triggered()
+{
+    ui->textEdit->undo();
+}
+
+void MainWindow::on_action_cut_triggered()
+{
+    ui->textEdit->cut();
+}
+
+void MainWindow::on_action_copy_triggered()
+{
+    ui->textEdit->copy();
+}
+
+void MainWindow::on_action_paste_triggered()
+{
+    ui->textEdit->paste();
+}
+
+void MainWindow::showFindText()
+{
+    QString str = findLineEdit->text();
+    if(!ui->textEdit->find(str,QTextDocument::FindBackward))
+    {
+        QMessageBox::warning(this,tr("查找"),tr("找不到%1").arg(str));
+    }
+}
+
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    //如果maybeSave()函数返回true,则关闭程序
+    if(maybeSave())
+    {
+        event->accept();
+    }
+    else
+    {
+        event->ignore();
+    }
+}
+
+void MainWindow::on_action_find_triggered()
+{
+    findDlg->show();
+}
+
+void MainWindow::on_action_font_triggered()
+{
+    //fontDlg->show();
+}
+
+void MainWindow::on_action_color_triggered()
+{
+}
